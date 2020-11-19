@@ -21,7 +21,10 @@ week_11 <- shaming %>%
   mutate(treatment = fct_relevel(treatment, "Control")) %>% 
   mutate(solo = ifelse(hh_size == 1, TRUE, FALSE)) %>% 
   select(-general_04, -no_of_names, -birth_year, -hh_size) %>% 
-  sample_n(10000)
+  sample_n(10000) %>%
+  mutate(sex = if_else(sex == "Male", 0, 1)) %>%
+  mutate(general_02 = if_else(general_02 == "Yes", 1, 0))
+         
 
 week_11_split <- initial_split(week_11)
 week_11_train <- training(week_11_split)
@@ -33,6 +36,88 @@ week_11_folds <- vfold_cv(week_11_train, v = 5)
 ## Scene 1
 
 **Prompt:** Explore a variety models which explain `primary_06` as a function of the variables in our data set. Make sure to explore some interaction terms. 
+
+
+```{r}
+
+s1 <- stan_glm(data = week_11_train,
+         family = gaussian(),
+         refresh = 0,
+         formula = primary_06 ~ treatment)
+
+print(s1, digits = 5)
+
+s2 <-stan_glm(data = week_11_train,
+         family = gaussian(),
+         refresh = 0,
+         formula = primary_06 ~ treatment + sex + age)
+
+print(s2, digits = 5)
+
+  
+
+```
+
+```{r}
+
+s1 <- workflow() %>%
+  add_recipe(recipe(primary_06 ~ treatment + sex, data = week_11_train) %>%               step_dummy(all_nominal())) %>%  add_model(linear_reg() %>% set_engine("lm")) %>%  step_dummy(all_nominal)
+
+s1 %>% 
+  fit(data = week_11_train) %>%  predict(new_data = week_11_test) %>%  
+  bind_cols(week_11_test %>% select(primary_06)) %>% 
+  metrics(truth = primary_06, estimate = `.pred`)
+
+s1_2 <- workflow() %>% 
+  add_recipe(recipe(primary_06 ~ treatment + sex, data = week_11_train) %>% 
+  step_interact(~ treatment * sex) %>% step_dummy(all_nominal)) %>%
+  add_model(linear_reg() %>% set_engine("lm"))
+
+print(s1_2, digits = 5)
+
+s1_2 %>%
+  fit(data = week_11_train) %>%  predict(new_data = week_11_test) %>% 
+  bind_cols(week_11_test %>% select(primary_06)) %>%
+  metrics(truth = primary_06, estimate = `.pred`)
+```
+
+
+```{r}
+
+# Rom Code
+
+s1 <- workflow() %>% 
+  add_recipe(recipe(primary_06 ~ treatment,
+             data = week_11_train) %>%
+             step_dummy(all_nominal())) %>%
+  add_model(linear_reg() %>% set_engine("lm")) %>%
+  step_dummy(all_nominal)
+
+s1 %>%
+  fit(data = week_11_train) %>%
+  predict(new_data = week_11_test) %>%
+  bind_cols(week_11_test %>% select(primary_06)) %>%
+  metrics(truth = primary_06, estimate = `.pred`)
+
+s1_2 <- workflow() %>% 
+  add_recipe(recipe(primary_06 ~ treatment + sex + age,
+             data = week_11_train) %>%
+             step_interact(~ treatment * sex) %>%
+             step_dummy(all_nominal())) %>%
+  add_model(linear_reg() %>% set_engine("lm")) %>%
+  step_dummy(all_nominal) +
+
+
+s1_2 %>%
+  fit(data = week_11_train) %>%
+  predict(new_data = week_11_test) %>%
+  bind_cols(week_11_test %>% select(primary_06)) %>%
+  metrics(truth = primary_06, estimate = `.pred`)
+
+```
+
+
+
 
 * Come up with at least two models that a) you like and would be willing to defend and b) are somewhat different from one another. The two most common model types in these situations are "simple" and "full". The former includes a minimum number of variables. The latter errs on the side of variable inclusion and the creation of interaction terms.
 
@@ -46,6 +131,39 @@ week_11_folds <- vfold_cv(week_11_train, v = 5)
 ## Scene 2
 
 **Prompt:** Compare your two models using cross-validation.
+
+```{r}
+
+s1_2_cross <- s1_2 %>%
+  fit_resamples(resamples = week_11_folds) %>%
+  collect_metrics()
+
+
+s2_cross <- workflow() %>%
+  add_recipe(recipe(primary_06 ~ treatment + sex + age,
+                    data = week_11_train)) %>%
+  add_model(linear_reg() %>% set_engine("lm")) %>%
+  fit_resamples(resamples = week_11_folds) %>%
+  collect_metrics()
+
+```
+
+```{r}
+
+# Rom Code
+
+results_1 <- s1_2 %>%
+  fit_resamples(resamples = week_11_folds) %>%
+  collect_metrics()
+
+results_2 <- s1 %>%
+  fit_resamples(resamples = week_11_folds) %>%
+  collect_metrics()
+
+results_2
+results_2
+
+```
 
 
 ## Scene 3
